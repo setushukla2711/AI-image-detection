@@ -1,0 +1,257 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Image Detection</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #101827, #243b55);
+      color: white;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 25px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 600px;
+      padding: 30px;
+      text-align: center;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 20px;
+      box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+    }
+
+    h1 {
+      color: #60a5fa;
+      margin-top: 0;
+    }
+
+    p {
+      color: #d1d5db;
+      line-height: 1.6;
+    }
+
+    .upload-box {
+      border: 2px dashed #60a5fa;
+      border-radius: 14px;
+      padding: 25px 15px;
+      margin: 22px 0;
+    }
+
+    input[type="file"] {
+      display: block;
+      width: 100%;
+      margin: 15px auto;
+      color: white;
+    }
+
+    img {
+      display: none;
+      max-width: 100%;
+      max-height: 320px;
+      object-fit: contain;
+      margin: 20px auto;
+      border-radius: 12px;
+    }
+
+    button {
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 13px 24px;
+      border-radius: 9px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 8px;
+    }
+
+    button:hover {
+      background: #1d4ed8;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    #status {
+      margin-top: 20px;
+      color: #93c5fd;
+    }
+
+    #results {
+      text-align: left;
+      margin-top: 20px;
+    }
+
+    .result-item {
+      padding: 12px;
+      margin: 8px 0;
+      background: rgba(255,255,255,0.09);
+      border-radius: 8px;
+    }
+
+    .bar {
+      height: 7px;
+      background: #60a5fa;
+      border-radius: 5px;
+      margin-top: 8px;
+    }
+
+    .note {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+  </style>
+</head>
+
+<body>
+  <main class="container">
+    <h1>🤖 AI Image Detection</h1>
+    <p>Upload an image and let AI identify the objects inside it.</p>
+
+    <div class="upload-box">
+      <label for="imageInput">Choose an image to analyze</label>
+      <input
+        type="file"
+        id="imageInput"
+        accept="image/*"
+      />
+    </div>
+
+    <img id="preview" alt="Selected image preview" />
+
+    <button id="detectBtn" disabled>
+      Detect Image
+    </button>
+
+    <p id="status">Loading AI model...</p>
+    <section id="results" aria-live="polite"></section>
+
+    <p class="note">
+      Predictions are estimates. Images are processed in your browser
+      after the model loads.
+    </p>
+  </main>
+
+  <script>
+    const imageInput = document.getElementById("imageInput");
+    const preview = document.getElementById("preview");
+    const detectBtn = document.getElementById("detectBtn");
+    const status = document.getElementById("status");
+    const results = document.getElementById("results");
+
+    let model = null;
+    let imageReady = false;
+
+    async function loadModel() {
+      try {
+        status.textContent = "Loading AI model. Please wait...";
+        model = await mobilenet.load();
+        status.textContent = "AI model ready! Upload an image.";
+        detectBtn.disabled = !imageReady;
+      } catch (error) {
+        status.textContent =
+          "Could not load AI model. Check your internet connection and reload.";
+        console.error(error);
+      }
+    }
+
+    imageInput.addEventListener("change", () => {
+      const file = imageInput.files[0];
+
+      imageReady = false;
+      detectBtn.disabled = true;
+      results.replaceChildren();
+
+      if (!file) {
+        preview.style.display = "none";
+        return;
+      }
+
+      if (!file.type.startsWith("image/")) {
+        status.textContent = "Please select a valid image.";
+        return;
+      }
+
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        preview.onload = () => {
+          imageReady = true;
+          detectBtn.disabled = !model;
+          status.textContent = model
+            ? "Image ready. Click Detect Image."
+            : "Image ready. Waiting for AI model...";
+        };
+
+        preview.onerror = () => {
+          status.textContent = "Could not display this image.";
+        };
+
+        preview.src = reader.result;
+        preview.style.display = "block";
+      };
+
+      reader.readAsDataURL(file);
+    });
+
+    detectBtn.addEventListener("click", async () => {
+      if (!model || !imageReady) return;
+
+      detectBtn.disabled = true;
+      results.replaceChildren();
+      status.textContent = "Analyzing image...";
+
+      try {
+        const predictions = await model.classify(preview, 5);
+
+        status.textContent = "Detection complete!";
+
+        predictions.forEach((prediction) => {
+          const item = document.createElement("div");
+          item.className = "result-item";
+
+          const label = document.createElement("div");
+          label.textContent =
+            prediction.className +
+            " — " +
+            (prediction.probability * 100).toFixed(2) +
+            "%";
+
+          const bar = document.createElement("div");
+          bar.className = "bar";
+          bar.style.width =
+            (prediction.probability * 100) + "%";
+
+          item.append(label, bar);
+          results.appendChild(item);
+        });
+      } catch (error) {
+        status.textContent = "Detection failed. Try another image.";
+        console.error(error);
+      } finally {
+        detectBtn.disabled = !model || !imageReady;
+      }
+    });
+
+    loadModel();
+  </script>
+</body>
+</html>
